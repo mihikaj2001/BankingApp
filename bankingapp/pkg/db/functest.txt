@@ -1,0 +1,158 @@
+package db
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	models "bank_app/pkg/models"
+
+	pg "github.com/go-pg/pg/v10"
+)
+
+// connect to the database
+func ConnectDB() {
+	db := pg.Connect(&pg.Options{
+		Addr:     ":5432",
+		User:     "postgres",
+		Password: "root",
+		Database: "bankdb",
+	})
+	defer db.Close()
+
+	ctx := context.Background()
+
+	if err := db.Ping(ctx); err != nil {
+		panic(err)
+	}
+
+	// bankone := &models.Banks{
+	// 	BankCode:    "try123",
+	// 	BankName:    "HSBC",
+	// 	BankAddress: "Jhandelwalan,Delhi-110052",
+	// }
+
+	// branchone := &models.Branches{
+	// 	IfscCode:   "13579",
+	// 	FkBankId:   3,
+	// 	BranchName: "branch2",
+	// }
+
+	// custone := &models.Customers{
+	// 	FirstName:     "Tom",
+	// 	LastName:      "Holland",
+	// 	PanNumber:     "09876ABCDE",
+	// 	AadharNumber:  1234512345,
+	// 	DOB:           "1990-09-08",
+	// 	Email:         "tomholland2001@gmail.com",
+	// 	ContactNumber: 9876546543,
+	// 	Addr:          "9-98-665/9/8,mihikaville",
+	// 	Gender:        "male",
+	// 	Occupation:    "student",
+	// 	FkBankId:      2,
+	// }
+
+	// accountone := &models.Accounts{
+	// 	FkCustomerId:   7,
+	// 	AccountNumber:  5555566666,
+	// 	IsActive:       false,
+	// 	AccountType:    "Loan Account",
+	// 	CurrentBalance: 10000,
+	// 	FkIfscCode:     "12345",
+	// }
+
+	// loanone := &models.Loans{
+	// 	FkCustomerId:    7,
+	// 	LoanAmount:      230000,
+	// 	LoanTerm:        6,
+	// 	LoanInterest:    3,
+	// 	TotalInterest:   16000,
+	// 	Installments:    30,
+	// 	MonthlyAmount:   5600,
+	// 	MonthlyInterest: 199,
+	// }
+
+	transactionone := &models.Transactions{
+		FkAccountId:             2,
+		CreditedAmount:          5998,
+		DebitedAmount:           9988,
+		RunningBalance:          12900,
+		OtherPartyIfsc:          "105345",
+		OtherPartyAccountNumber: 1,
+		OtherPartyBankName:      "HDFC",
+		OtherPartyBranchName:    "Banjara Hills",
+	}
+
+	log.Print(transactionone)
+	//db.AddQueryHook(bankone.NewDebugHook())
+	_, err := db.Model(transactionone).Insert()
+	if err != nil {
+		panic(err)
+	}
+
+	// accountname := new(models.Accounts)
+	// err := db.Model(accountname).Where("account_id = 1").Select()
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	// fmt.Print(accountname.AccountId)
+
+	var customers []models.Customers
+	err = db.Model(&customers).Select()
+	if err != nil {
+		panic(err)
+	}
+	for i := range customers {
+		fmt.Println(&customers[i])
+	}
+
+	test := models.Customers{
+		CustomerId: 2,
+		FirstName:  "Mihika",
+	}
+
+	val, err := db.Model(&test).Column("customer_id", "first_name").Where("customer_id = ?0", test.CustomerId).Update()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(val)
+
+	return
+}
+
+code for transaction withdrawal minus updating of the accounts table
+func TransactionWithdraw(db *pg.DB, newWithdrawal *TransactData) models.Transactions {
+	var account1 models.Accounts
+	var trans1 models.Transactions
+	trans1.FkAccountId = newWithdrawal.ACCOUNT_ID
+	err := db.Model(&account1).ColumnExpr("current_balance, fk_ifsc_code, account_number").Where("account_id = ?0", newWithdrawal.ACCOUNT_ID).Select()
+	if err != nil {
+		fmt.Print(err)
+		panic(err)
+	}
+	// fmt.Println(newWithdrawal)
+	fmt.Println(account1)
+	trans1.CreditedAmount = 0
+	trans1.DebitedAmount = newWithdrawal.AMOUNT
+	trans1.RunningBalance = account1.CurrentBalance - newWithdrawal.AMOUNT
+	if trans1.RunningBalance < 0 {
+		fmt.Println("Balance too low for transaction")
+		return trans1
+	}
+	trans1.OtherPartyAccountNumber = int(account1.AccountNumber)
+	trans1.OtherPartyBankName = "same_bank"
+	trans1.OtherPartyBranchName = "same_branch"
+	trans1.OtherPartyIfsc = account1.FkIfscCode
+	// trans1.
+	fmt.Println(trans1)
+
+	_, err = db.Model(&trans1).Insert()
+	if err != nil {
+		fmt.Print(err.Error())
+		panic(err)
+	}
+	return trans1
+
+}
+
